@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="149640b1-3df9-4e6b-a771-2bfa2d6a1b2b" name="RGAT" url="http://terra3.tamu.edu">
+        <fileTransfer host="terra3.tamu.edu" port="22" rootFolder="/scratch/user/dadhich.nalin" accessType="SFTP">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

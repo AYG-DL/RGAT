@@ -16,21 +16,21 @@ class GAT():
 
         
         self.W_heads = [tf.get_variable("Weights"+str(layer_no)+str(n),[nb_features,hid_units],dtype=tf.float32) for n in range(n_heads)]
-        self.a_heads = [tf.get_variable("Feedforward_Layer"+str(layer_no)+str(n),[2*hid_units,1],dtype=tf.float32) for n in range(n_heads)]
-        
+        print()
+        # self.a_heads = [tf.get_variable("Feedforward_Layer"+str(layer_no)+str(n),[2*hid_units,1],dtype=tf.float32) for n in range(n_heads)]
+        print(layer_no)
         self.W = [self.W_heads for  _ in range(len(adj_mat))]
-        self.a = [self.a_heads for _ in range(len(adj_mat))]
+        # self.a = [self.a_heads for _ in range(len(adj_mat))]
         
-        H_all_rel=[]
+        self.H_all_rel=[]
         start = time.time()
         zero = tf.constant(0, dtype=tf.float32)
         for i,rel_mat in enumerate(adj_mat):
             H = []
-            print("########################")
             for j in range(n_heads):
-                print(".",)
+
                 W_r = self.W[i][j] #FxF'
-                a_r = self.a[i][j] #2F'x1
+                # a_r = self.a[i][j] #2F'x1
                 
                 if len(input_feat_mat)==1:
                     h_pr = tf.sparse_tensor_dense_matmul(input_feat_mat[0],W_r) #N*F' matrix
@@ -60,10 +60,9 @@ class GAT():
                 f_2 = tf.layers.conv1d(h_pr, 1, 1)
                 logits = f_1 + tf.transpose(f_2, [0, 2, 1])
 
-                print(logits.shape)
                 coefs = tf.nn.softmax(tf.sparse_add(tf.nn.leaky_relu(logits),rel_mat))
 
-                print(coefs.shape)
+
 
                 
                 # a_r = tf.stack([a_r for _ in range(nb_nodes)],axis=0)
@@ -91,8 +90,8 @@ class GAT():
                 h_prime_weighted = tf.matmul(coefs,h_pr)
                 rest2 = time.time()
 
-                print(h_prime_weighted.shape)
-                print("Rest time",rest2-rest1)
+                #print(h_prime_weighted.shape)
+
                 if concat:
                     F_ = activation(h_prime_weighted)
                 else:                                                                               #averaged
@@ -100,19 +99,37 @@ class GAT():
 
                 F_ = tf.squeeze(F_,axis=0)
 
-                print("&&&&&&&&&&&&&&&&&&")
-                print(F_.shape)
+
+
                 H.append(F_)
 
             if concat:
-                H_all_rel.append(tf.concat(H,axis=1))
+                self.H_all_rel.append(tf.concat(H,axis=1))
             
             else:
-                H_all_rel.append(tf.add_n(H)/len(H))
+                self.H_all_rel.append(tf.add_n(H)/len(H))
                 
 
             stop = time.time()
 
-        print(stop-start)
+        # print(stop-start)
+        # print(len(H_all_rel))
+        # print(H_all_rel[0].shape)
 
-        return H_all_rel
+        return self.H_all_rel
+
+    def training(self, loss, lr, l2_coef):
+        # weight decay
+        vars = tf.trainable_variables()
+        lossL2 = tf.add_n([tf.nn.l2_loss(v) for v in vars if v.name not
+                           in ['bias', 'gamma', 'b', 'g', 'beta']]) * l2_coef
+
+        # optimizer
+        opt = tf.train.AdamOptimizer(learning_rate=lr)
+
+        # training op
+        train_op = opt.minimize(loss + lossL2)
+
+        return train_op
+
+
