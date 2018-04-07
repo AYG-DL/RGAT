@@ -60,8 +60,9 @@ class GAT():
                 f_2 = tf.layers.conv1d(h_pr, 1, 1)
                 logits = f_1 + tf.transpose(f_2, [0, 2, 1])
 
+                logits = tf.squeeze(logits,axis=0)
+                # print((logits).get_shape().as_list())
                 coefs = tf.nn.softmax(tf.sparse_add(tf.nn.leaky_relu(logits),rel_mat))
-
 
 
                 
@@ -86,8 +87,12 @@ class GAT():
                 
                 # attention = tf.nn.softmax(attention,axis=1)
                 # print (attention.shape)
-
+                h_pr = tf.squeeze(h_pr,axis=0)
+                print((h_pr).get_shape().as_list())
                 h_prime_weighted = tf.matmul(coefs,h_pr)
+                print((h_prime_weighted).get_shape().as_list())
+
+                # h_prime_weighted = h_pr
                 rest2 = time.time()
 
                 #print(h_prime_weighted.shape)
@@ -97,9 +102,9 @@ class GAT():
                 else:                                                                               #averaged
                     F_ = h_prime_weighted
 
-                F_ = tf.squeeze(F_,axis=0)
-
-
+                # print((F_).get_shape().as_list())
+                # F_ = tf.squeeze(F_,axis=0) #remove the batch dimension from the start
+                # print((F_).get_shape().as_list())
 
                 H.append(F_)
 

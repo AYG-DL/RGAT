@@ -9,6 +9,7 @@ import utils as utils
 import scipy.sparse as sp
 import os
 from models import GAT
+import collections
 # checkpt_file = 'pre_trained/cora/mod_cora.ckpt'
 
 # dataset = 'cora'
@@ -105,6 +106,11 @@ model1 = GAT()
 model2 = GAT()
 
 A = list(map(lambda x: utils.convert_sparse_matrix_to_sparse_tensor(x),A))
+
+# print (type(A))
+
+# for i in A:
+#     print (i)
 # add self attention loops to every tensor matrix
 nb_epochs = 1000
 # Sparse tensor dropout here
@@ -115,11 +121,32 @@ with tf.Graph().as_default():
     X_in = tf.sparse_placeholder(dtype=tf.float32, shape=(nb_nodes,nb_nodes))
     lbl_in = tf.placeholder(dtype=tf.int32, shape=(batch_size, nb_nodes, nb_classes))
     msk_in = tf.placeholder(dtype=tf.int32, shape=(batch_size, nb_nodes))
-    attn_drop = tf.placeholder(dtype=tf.float32, shape=())
-    ffd_drop = tf.placeholder(dtype=tf.float32, shape=())
+    attn_drop = tf.placeholder(dtype=tf.float32)
+    ffd_drop = tf.placeholder(dtype=tf.float32)
 
+    # for i,d in zip(A_in,A):
+    #     print (i,d)
+
+    feed_dict = {}
+
+    for i,d in zip(A_in,A):
+        feed_dict[i]=d
+
+    feed_dict[X_in] = utils.convert_sparse_matrix_to_sparse_tensor(X)
+    feed_dict[lbl_in] = y_train
+    feed_dict[msk_in] = train_mask
+    feed_dict[attn_drop] = 0.6
+    feed_dict[ffd_drop] = 0.6
+
+    for i in feed_dict.values():
+        print(type(i))
+
+
+    # print (feed_dict)
+
+    # add dropout on the input here(please dont remove this fucking comment)
     H = model1.setup(layer_no=1,input_feat_mat=[X_in], hid_units=8,
-                nb_features=tf.contrib.util.constant_value(X_in.dense_shape)[1], nb_nodes=tf.contrib.util.constant_value(X_in.dense_shape)[1], training=True, attn_drop=attn_drop, ffd_drop=ffd_drop,
+                nb_features=8285, nb_nodes=8285, training=True, attn_drop=attn_drop, ffd_drop=ffd_drop,
                 adj_mat=A_in, n_heads=8, concat=True)
 
     for i,h in enumerate(H):
@@ -162,12 +189,8 @@ with tf.Graph().as_default():
 
             # while tr_step * batch_size < tr_size:
             loss_value_tr, acc_tr = sess.run([train_op,accuracy],
-                                                    feed_dict={
-                                                        X_in: X,
-                                                        A_in: A,
-                                                        lbl_in: y_train,
-                                                        msk_in: train_mask,
-                                                        attn_drop: 0.6, ffd_drop: 0.6})
+                                                    feed_dict=feed_dict)
+                
                 # train_loss_avg += loss_value_tr
                 # train_acc_avg += acc_tr
                 # tr_step += 1
@@ -187,9 +210,9 @@ with tf.Graph().as_default():
             #     val_acc_avg += acc_vl
             #     vl_step += 1
 
-            print('Training: loss = %.5f, acc = %.5f | Val: loss = %.5f, acc = %.5f' %
-                  (train_loss_avg / tr_step, train_acc_avg / tr_step,
-                   val_loss_avg / vl_step, val_acc_avg / vl_step))
+            # print('Training: loss = %.5f, acc = %.5f | Val: loss = %.5f, acc = %.5f' %
+            #       (train_loss_avg / tr_step, train_acc_avg / tr_step,
+            #        val_loss_avg / vl_step, val_acc_avg / vl_step))
 
         #     if val_acc_avg / vl_step >= vacc_mx or val_loss_avg / vl_step <= vlss_mn:
         #         if val_acc_avg / vl_step >= vacc_mx and val_loss_avg / vl_step <= vlss_mn:

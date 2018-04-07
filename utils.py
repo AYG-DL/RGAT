@@ -228,9 +228,9 @@ def convert_sparse_matrix_to_sparse_tensor(X):
     indices = np.mat([coo.row, coo.col]).transpose()
 
     if(X.sum()>0):
-        a = tf.SparseTensor(indices, coo.data, coo.shape)
+        a = tf.SparseTensorValue(indices, coo.data, coo.shape)
     else:
-        a = tf.SparseTensor(indices = [[0,0]], values=[-10.0] , dense_shape=X.shape)
+        a = tf.SparseTensorValue(indices = [[0,0]], values=[-10.0] , dense_shape=X.shape)
     return a
 
 
