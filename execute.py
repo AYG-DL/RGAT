@@ -117,10 +117,17 @@ nb_epochs = 1000
 
 with tf.Graph().as_default():
 
-    A_in = [tf.sparse_placeholder(dtype=tf.float32, shape=(nb_nodes,nb_nodes)) for _ in range(len(A))]
-    X_in = tf.sparse_placeholder(dtype=tf.float32, shape=(nb_nodes,nb_nodes))
-    lbl_in = tf.placeholder(dtype=tf.int32, shape=(batch_size, nb_nodes, nb_classes))
-    msk_in = tf.placeholder(dtype=tf.int32, shape=(batch_size, nb_nodes))
+    # shape = [8285, 8285]
+    # shape = np.array(shape, dtype=np.int64)
+
+    A_in = [tf.sparse_placeholder(dtype=tf.float32) for _ in range(len(A))]
+    # print(A_in[89].get_shape())
+    X_in = tf.sparse_placeholder(dtype=tf.float32)
+    # print(X_in.get_shape())
+
+    lbl_in = tf.placeholder(dtype=tf.float32, shape=(nb_nodes, nb_classes))
+
+    msk_in = tf.placeholder(dtype=tf.float32, shape=(nb_nodes))
     attn_drop = tf.placeholder(dtype=tf.float32)
     ffd_drop = tf.placeholder(dtype=tf.float32)
 
@@ -135,11 +142,16 @@ with tf.Graph().as_default():
     feed_dict[X_in] = utils.convert_sparse_matrix_to_sparse_tensor(X)
     feed_dict[lbl_in] = y_train
     feed_dict[msk_in] = train_mask
+    # print("$$$$$$$$$$$$$$$$$$$$$$$$$")
+    # print(type(train_mask))
+    # print(train_mask.shape)
+    # print("$$$$$$$$$$$$$$$$$$$$$$$$$")
+
     feed_dict[attn_drop] = 0.6
     feed_dict[ffd_drop] = 0.6
 
-    for i in feed_dict.values():
-        print(type(i))
+    # for i in feed_dict.values():
+    #     print(type(i))
 
 
     # print (feed_dict)
@@ -154,17 +166,26 @@ with tf.Graph().as_default():
 
     # hidden units changes to number of classes in second layer
     C = model2.setup(layer_no=2,input_feat_mat=H, hid_units=nb_classes,
-                nb_features=H[0].shape[1], nb_nodes=H[0].shape[0], training=True, attn_drop=attn_drop, ffd_drop=ffd_drop,
+                nb_features=64, nb_nodes=8285, training=True, attn_drop=attn_drop, ffd_drop=ffd_drop,
                 adj_mat=A_in, n_heads=8, concat=False)
 
-
     C = C[0]
-    C = C[np.newaxis]
 
+
+    #C = C[np.newaxis]
+    print("a")
     log_resh = tf.reshape(C, [-1, nb_classes])
+    print("b")
     lab_resh = tf.reshape(lbl_in, [-1, nb_classes])
+    print("c")
     msk_resh = tf.reshape(msk_in, [-1])
 
+    print("^^^^^^^^^^^^^^^^^^^^^^")
+    print(log_resh.dtype)
+    print(log_resh.get_shape().as_list())
+    print(lab_resh.dtype)
+    print(lab_resh.get_shape().as_list())
+    print("^^^^^^^^^^^^^^^^^^^^^^")
 
     loss = utils.masked_softmax_cross_entropy(log_resh, lab_resh, msk_resh)
 

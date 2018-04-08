@@ -155,7 +155,7 @@ def get_splits(y, train_idx, test_idx, validation=True):
     y_val[idx_val] = np.array(y[idx_val].todense())
     y_test[idx_test] = np.array(y[idx_test].todense())
 
-    return y_train, y_val, y_test, idx_train, idx_val, idx_test
+    return y_train.astype('float32'), y_val.astype('float32'), y_test.astype('float32'), idx_train, idx_val, idx_test
 
 
 def normalize_adj(adj, symmetric=True):
@@ -256,7 +256,9 @@ def masked_sigmoid_cross_entropy(logits, labels, mask):
 def masked_accuracy(logits, labels, mask):
     """Accuracy with masking."""
     correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(labels, 1))
+
     accuracy_all = tf.cast(correct_prediction, tf.float32)
+
     mask = tf.cast(mask, dtype=tf.float32)
     mask /= tf.reduce_mean(mask)
     accuracy_all *= mask
