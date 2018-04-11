@@ -64,6 +64,11 @@ class GAT():
                 # print((logits).get_shape().as_list())
                 coefs = tf.nn.softmax(tf.sparse_add(tf.nn.leaky_relu(logits),rel_mat))
 
+                # if attn_drop != 0.0:
+                #     coefs = tf.nn.dropout(coefs, 1.0 - attn_drop)
+                # if in_drop != 0.0:
+                #    h_pr = tf.nn.dropout(h_pr, 1.0 - in_drop)
+
 
                 
                 # a_r = tf.stack([a_r for _ in range(nb_nodes)],axis=0)
@@ -88,9 +93,10 @@ class GAT():
                 # attention = tf.nn.softmax(attention,axis=1)
                 # print (attention.shape)
                 h_pr = tf.squeeze(h_pr,axis=0)
-                print((h_pr).get_shape().as_list())
+                # print((h_pr).get_shape().as_list())
                 h_prime_weighted = tf.matmul(coefs,h_pr)
-                print((h_prime_weighted).get_shape().as_list())
+                h_prime_weighted = tf.contrib.layers.bias_add(h_prime_weighted)
+                # print((h_prime_weighted).get_shape().as_list())
 
                 # h_prime_weighted = h_pr
                 rest2 = time.time()
@@ -123,18 +129,19 @@ class GAT():
 
         return self.H_all_rel
 
+
     def training(self, loss, lr, l2_coef):
         # weight decay
         vars = tf.trainable_variables()
+        # print(vars)
         lossL2 = tf.add_n([tf.nn.l2_loss(v) for v in vars if v.name not
                            in ['bias', 'gamma', 'b', 'g', 'beta']]) * l2_coef
 
         # optimizer
-        opt = tf.train.AdamOptimizer(learning_rate=lr)
-
-        # training op
+        opt = tf.train.AdamOptimizer(learning_rate=lr)        
         train_op = opt.minimize(loss + lossL2)
 
+        # print(train_op)
         return train_op
 
 

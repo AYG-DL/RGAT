@@ -8,6 +8,7 @@ import pickle as pkl
 import utils as utils
 import scipy.sparse as sp
 import os
+# os.environ["CUDA_VISIBLE_DEVICES"]="-1"    
 from models import GAT
 import collections
 # checkpt_file = 'pre_trained/cora/mod_cora.ckpt'
@@ -39,6 +40,8 @@ import collections
 # print('model: ' + str(model))
 # sys.stdout.flush()
 
+patience = 100
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 with open("./aifb.pickle",'rb') as f:
@@ -58,15 +61,23 @@ train_mask = utils.sample_mask(idx_train, y.shape[0])
 
 val_mask = utils.sample_mask(idx_val,y.shape[0])
 
+test_mask = utils.sample_mask(idx_test,y.shape[0])
 
+
+print (train_mask) 
+
+print (val_mask)
 
 A = A[:-1] # remove the last self relation matrix
 num_nodes = A[0].shape[0]
 relations = len(A)
 
+#watch and learn baby
+# for i in range(len(A)):
+#     A[i]+= sp.eye(A[0]).shape
 
 # one hot encoded vectors as features for all the datasets
-X = sp.csr_matrix(A[0].shape)
+X = sp.eye(A[0].shape[0],A[0].shape[1])
 
 
 # Normalize adjacency matrices individually
@@ -83,23 +94,8 @@ for i in range(len(A)):
 batch_size = 1
 nb_nodes = X.shape[0]
 nb_classes = 4
-lr = 0.005  # learning rate
-l2_coef = 0.0005  # weight decay
-
-# placeholders for the session
-# y = [tf.sparse_placeholder(tf.float32) for _ in range(len(A))]
-
-# y = A
-
-
-# ftr_in = tf.sparse_placeholder(dtype=tf.float32, shape=(nb_nodes, ft_size))
-# bias_in = tf.sparse_placeholder(dtype=tf.float32, shape=(nb_nodes, nb_nodes))
-# lbl_in = tf.sparse_placeholder(dtype=tf.int32, shape=(nb_nodes, nb_classes))
-# msk_in = tf.sparse_placeholder(dtype=tf.int32, shape=(nb_nodes))
-# attn_drop = tf.sparse_placeholder(dtype=tf.float32, shape=())
-# ffd_drop = tf.sparse_placeholder(dtype=tf.float32, shape=())
-# is_train = tf.sparse_placeholder(dtype=tf.bool, shape=())
-
+lr = 0.008  # learning rate
+l2_coef = 0  # weight decay
 
 
 model1 = GAT()
@@ -112,7 +108,8 @@ A = list(map(lambda x: utils.convert_sparse_matrix_to_sparse_tensor(x),A))
 # for i in A:
 #     print (i)
 # add self attention loops to every tensor matrix
-nb_epochs = 1000
+checkpt_file = './wat.ckpt'
+nb_epochs = 10
 # Sparse tensor dropout here
 
 with tf.Graph().as_default():
@@ -142,19 +139,37 @@ with tf.Graph().as_default():
     feed_dict[X_in] = utils.convert_sparse_matrix_to_sparse_tensor(X)
     feed_dict[lbl_in] = y_train
     feed_dict[msk_in] = train_mask
-    # print("$$$$$$$$$$$$$$$$$$$$$$$$$")
-    # print(type(train_mask))
-    # print(train_mask.shape)
-    # print("$$$$$$$$$$$$$$$$$$$$$$$$$")
 
     feed_dict[attn_drop] = 0.6
     feed_dict[ffd_drop] = 0.6
 
-    # for i in feed_dict.values():
-    #     print(type(i))
+    
+    feed_dict_val = {}
+
+    for i,d in zip(A_in,A):
+        feed_dict_val[i]=d
+
+    feed_dict_val[X_in] = utils.convert_sparse_matrix_to_sparse_tensor(X)
+
+    feed_dict_val[lbl_in] = y_val
+    feed_dict_val[msk_in] = val_mask
+
+    feed_dict_val[attn_drop] = 0.0
+    feed_dict_val[ffd_drop] = 0.0
 
 
-    # print (feed_dict)
+    feed_dict_test = {}
+
+    for i,d in zip(A_in,A):
+        feed_dict_test[i]=d
+
+    feed_dict_test[X_in] = utils.convert_sparse_matrix_to_sparse_tensor(X)
+    feed_dict_test[lbl_in] = y_test
+    feed_dict_test[msk_in] = test_mask
+
+    feed_dict_test[attn_drop] = 0.0
+    feed_dict_test[ffd_drop] = 0.0
+
 
     # add dropout on the input here(please dont remove this fucking comment)
     H = model1.setup(layer_no=1,input_feat_mat=[X_in], hid_units=8,
@@ -172,20 +187,9 @@ with tf.Graph().as_default():
     C = C[0]
 
 
-    #C = C[np.newaxis]
-    print("a")
     log_resh = tf.reshape(C, [-1, nb_classes])
-    print("b")
     lab_resh = tf.reshape(lbl_in, [-1, nb_classes])
-    print("c")
     msk_resh = tf.reshape(msk_in, [-1])
-
-    print("^^^^^^^^^^^^^^^^^^^^^^")
-    print(log_resh.dtype)
-    print(log_resh.get_shape().as_list())
-    print(lab_resh.dtype)
-    print(lab_resh.get_shape().as_list())
-    print("^^^^^^^^^^^^^^^^^^^^^^")
 
     loss = utils.masked_softmax_cross_entropy(log_resh, lab_resh, msk_resh)
 
@@ -194,6 +198,11 @@ with tf.Graph().as_default():
     train_op = model2.training(loss, lr, l2_coef)
 
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
+
+    vlss_mn = np.inf
+    vacc_mx = 0.0
+    curr_step = 0
+    saver = tf.train.Saver()
 
     with tf.Session() as sess:
         sess.run(init_op)
@@ -206,75 +215,65 @@ with tf.Graph().as_default():
 
         for epoch in range(nb_epochs):
             tr_step = 0
-            tr_size = X.shape[0]
+            tr_size = 1
 
-            # while tr_step * batch_size < tr_size:
-            loss_value_tr, acc_tr = sess.run([train_op,accuracy],
+            while tr_step * batch_size < tr_size:
+                _,loss_value_tr, acc_tr = sess.run([train_op,loss,accuracy],
                                                     feed_dict=feed_dict)
                 
-                # train_loss_avg += loss_value_tr
-                # train_acc_avg += acc_tr
-                # tr_step += 1
+                print(loss_value_tr)
+                train_loss_avg += loss_value_tr
+                train_acc_avg += acc_tr
+                tr_step += 1
 
-            # vl_step = 0
-            # vl_size = features.shape[0]
-            #
-            # while vl_step * batch_size < vl_size:
-            #     loss_value_vl, acc_vl = sess.run([loss, accuracy],
-            #                                      feed_dict={
-            #                                          X_in: X[vl_step * batch_size:(vl_step + 1) * batch_size],
-            #                                          bias_in: biases[vl_step * batch_size:(vl_step + 1) * batch_size],
-            #                                          lbl_in: y_val[vl_step * batch_size:(vl_step + 1) * batch_size],
-            #                                          msk_in: val_mask[vl_step * batch_size:(vl_step + 1) * batch_size],
-            #                                          attn_drop: 0.0, ffd_drop: 0.0})
-            #     val_loss_avg += loss_value_vl
-            #     val_acc_avg += acc_vl
-            #     vl_step += 1
+            vl_step = 0
+            vl_size = 1
+            
+            while vl_step * batch_size < vl_size:
+                loss_value_vl, acc_vl = sess.run([loss, accuracy],
+                                                 feed_dict=feed_dict_val)
+                val_loss_avg += loss_value_vl
+                val_acc_avg += acc_vl
+                vl_step += 1
 
-            # print('Training: loss = %.5f, acc = %.5f | Val: loss = %.5f, acc = %.5f' %
-            #       (train_loss_avg / tr_step, train_acc_avg / tr_step,
-            #        val_loss_avg / vl_step, val_acc_avg / vl_step))
+            print('Epoch: %d, Training: loss = %.5f, acc = %.5f | Val: loss = %.5f, acc = %.5f' %
+                  (epoch,train_loss_avg / tr_step, train_acc_avg / tr_step,
+                   val_loss_avg / vl_step, val_acc_avg / vl_step))
 
-        #     if val_acc_avg / vl_step >= vacc_mx or val_loss_avg / vl_step <= vlss_mn:
-        #         if val_acc_avg / vl_step >= vacc_mx and val_loss_avg / vl_step <= vlss_mn:
-        #             vacc_early_model = val_acc_avg / vl_step
-        #             vlss_early_model = val_loss_avg / vl_step
-        #             saver.save(sess, checkpt_file)
-        #         vacc_mx = np.max((val_acc_avg / vl_step, vacc_mx))
-        #         vlss_mn = np.min((val_loss_avg / vl_step, vlss_mn))
-        #         curr_step = 0
-        #     else:
-        #         curr_step += 1
-        #         if curr_step == patience:
-        #             print('Early stop! Min loss: ', vlss_mn, ', Max accuracy: ', vacc_mx)
-        #             print('Early stop model validation loss: ', vlss_early_model, ', accuracy: ', vacc_early_model)
-        #             break
-        #
-        #     train_loss_avg = 0
-        #     train_acc_avg = 0
-        #     val_loss_avg = 0
-        #     val_acc_avg = 0
-        #
-        # saver.restore(sess, checkpt_file)
-        #
-        # ts_size = features.shape[0]
-        # ts_step = 0
-        # ts_loss = 0.0
-        # ts_acc = 0.0
-        #
-        # while ts_step * batch_size < ts_size:
-        #     loss_value_ts, acc_ts = sess.run([loss, accuracy],
-        #                                      feed_dict={
-        #                                          ftr_in: features[ts_step * batch_size:(ts_step + 1) * batch_size],
-        #                                          bias_in: biases[ts_step * batch_size:(ts_step + 1) * batch_size],
-        #                                          lbl_in: y_test[ts_step * batch_size:(ts_step + 1) * batch_size],
-        #                                          msk_in: test_mask[ts_step * batch_size:(ts_step + 1) * batch_size],
-        #                                          is_train: False,
-        #                                          attn_drop: 0.0, ffd_drop: 0.0})
-        #     ts_loss += loss_value_ts
-        #     ts_acc += acc_ts
-        #     ts_step += 1
-        #
-        # print('Test loss:', ts_loss / ts_step, '; Test accuracy:', ts_acc / ts_step)
+            if val_acc_avg / vl_step >= vacc_mx or val_loss_avg / vl_step <= vlss_mn:
+                if val_acc_avg / vl_step >= vacc_mx and val_loss_avg / vl_step <= vlss_mn:
+                    vacc_early_model = val_acc_avg / vl_step
+                    vlss_early_model = val_loss_avg / vl_step
+                    saver.save(sess, checkpt_file)
+                vacc_mx = np.max((val_acc_avg / vl_step, vacc_mx))
+                vlss_mn = np.min((val_loss_avg / vl_step, vlss_mn))
+                curr_step = 0
+            else:
+                curr_step += 1
+                if curr_step == patience:
+                    print('Early stop! Min loss: ', vlss_mn, ', Max accuracy: ', vacc_mx)
+                    print('Early stop model validation loss: ', vlss_early_model, ', accuracy: ', vacc_early_model)
+                    break
+        
+            train_loss_avg = 0
+            train_acc_avg = 0
+            val_loss_avg = 0
+            val_acc_avg = 0
+        
+        saver.restore(sess, checkpt_file)
+        
+        ts_size = 1
+        ts_step = 0
+        ts_loss = 0.0
+        ts_acc = 0.0
+        
+        while ts_step * batch_size < ts_size:
+            loss_value_ts, acc_ts = sess.run([loss, accuracy],
+                                             feed_dict=feed_dict_test)
+            ts_loss += loss_value_ts
+            ts_acc += acc_ts
+            ts_step += 1
+        
+        print('Test loss:', ts_loss / ts_step, '; Test accuracy:', ts_acc / ts_step)
 
         sess.close()

@@ -222,7 +222,7 @@ def evaluate_preds_sigmoid(preds, labels, indices):
 #convert scipy matrix to sparse tensorflow tensor
 
 def convert_sparse_matrix_to_sparse_tensor(X):
-    
+    # sparse matrix empty creation problem
     # X = X.astype(np.float32)
     coo = X.tocoo()
     indices = np.mat([coo.row, coo.col]).transpose()
