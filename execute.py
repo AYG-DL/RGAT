@@ -57,24 +57,30 @@ y_train, y_val, y_test, idx_train, idx_val, idx_test = utils.get_splits(y, train
                                                                   test_idx,
                                                                   False)
 
-train_mask = utils.sample_mask(idx_train, y.shape[0])
 
-val_mask = utils.sample_mask(idx_val,y.shape[0])
+print((y_train.shape))
+# train_mask = utils.sample_mask(idx_train, y.shape[0])
 
-test_mask = utils.sample_mask(idx_test,y.shape[0])
+# val_mask = utils.sample_mask(idx_val,y.shape[0])
+
+# test_mask = utils.sample_mask(idx_test,y.shape[0])
 
 
-print (train_mask) 
+# print (train_mask) 
 
-print (val_mask)
+# print (val_mask)
+
+print (idx_train)
+print (idx_val)
+print (idx_test)
 
 A = A[:-1] # remove the last self relation matrix
 num_nodes = A[0].shape[0]
 relations = len(A)
 
-#watch and learn baby
-# for i in range(len(A)):
-#     A[i]+= sp.eye(A[0]).shape
+# watch and learn baby
+for i in range(len(A)):
+    A[i]+= sp.eye(A[0].shape[0],A[0].shape[1])
 
 # one hot encoded vectors as features for all the datasets
 X = sp.eye(A[0].shape[0],A[0].shape[1])
@@ -94,7 +100,7 @@ for i in range(len(A)):
 batch_size = 1
 nb_nodes = X.shape[0]
 nb_classes = 4
-lr = 0.008  # learning rate
+lr = 0.0005  # learning rate
 l2_coef = 0  # weight decay
 
 
@@ -122,9 +128,14 @@ with tf.Graph().as_default():
     X_in = tf.sparse_placeholder(dtype=tf.float32)
     # print(X_in.get_shape())
 
-    lbl_in = tf.placeholder(dtype=tf.float32, shape=(nb_nodes, nb_classes))
+    lbl_in_trn = tf.placeholder(dtype=tf.int32, shape = (None,y_train.shape[1]))
+    lbl_in_val = tf.placeholder(dtype=tf.int32, shape = (None,y_val.shape[1]))
+    lbl_in_test = tf.placeholder(dtype=tf.int32, shape = (None,y_test.shape[1]))
 
-    msk_in = tf.placeholder(dtype=tf.float32, shape=(nb_nodes))
+    idx_train_tf = [tf.placeholder(dtype=tf.int32) for _ in range(len(idx_train))]
+    idx_val_tf = [tf.placeholder(dtype=tf.int32) for _ in range(len(idx_val))]  
+    idx_test_tf = [tf.placeholder(dtype=tf.int32) for _ in range(len(idx_test))]
+    # msk_in = tf.placeholder(dtype=tf.float32, shape=(nb_nodes))
     attn_drop = tf.placeholder(dtype=tf.float32)
     ffd_drop = tf.placeholder(dtype=tf.float32)
 
@@ -137,25 +148,27 @@ with tf.Graph().as_default():
         feed_dict[i]=d
 
     feed_dict[X_in] = utils.convert_sparse_matrix_to_sparse_tensor(X)
-    feed_dict[lbl_in] = y_train
-    feed_dict[msk_in] = train_mask
-
+    feed_dict[lbl_in_trn] = y_train
+    feed_dict[lbl_in_val] = y_val
+    for i,d in zip(idx_train_tf,idx_train):
+        feed_dict[i]=d
+    # feed_dict[idx_train_tf] = idx_train
+    for i,d in zip(idx_val_tf,idx_val):
+        feed_dict[i]=d
+    # feed_dict[idx_val_tf] = idx_val
     feed_dict[attn_drop] = 0.6
     feed_dict[ffd_drop] = 0.6
 
     
-    feed_dict_val = {}
+    # feed_dict_val = {}
 
-    for i,d in zip(A_in,A):
-        feed_dict_val[i]=d
-
-    feed_dict_val[X_in] = utils.convert_sparse_matrix_to_sparse_tensor(X)
-
-    feed_dict_val[lbl_in] = y_val
-    feed_dict_val[msk_in] = val_mask
-
-    feed_dict_val[attn_drop] = 0.0
-    feed_dict_val[ffd_drop] = 0.0
+    # for i,d in zip(A_in,A):
+    #     feed_dict_val[i]=d
+    # feed_dict_val[X_in] = utils.convert_sparse_matrix_to_sparse_tensor(X)
+    # feed_dict_val[lbl_in] = y_val
+    # feed_dict_val[msk_in] = val_mask
+    # feed_dict_val[attn_drop] = 0.0
+    # feed_dict_val[ffd_drop] = 0.0
 
 
     feed_dict_test = {}
@@ -164,9 +177,9 @@ with tf.Graph().as_default():
         feed_dict_test[i]=d
 
     feed_dict_test[X_in] = utils.convert_sparse_matrix_to_sparse_tensor(X)
-    feed_dict_test[lbl_in] = y_test
-    feed_dict_test[msk_in] = test_mask
-
+    feed_dict_test[lbl_in_test] = y_test
+    for i,d in zip(idx_test_tf,idx_test):
+        feed_dict_test[i]=d
     feed_dict_test[attn_drop] = 0.0
     feed_dict_test[ffd_drop] = 0.0
 
@@ -186,16 +199,15 @@ with tf.Graph().as_default():
 
     C = C[0]
 
+    C = tf.reshape(C,[-1,nb_classes])
+    # # print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+    # print (C.get_shape().as_list())
+    # idx_train_tf
+    train_val_loss, train_val_acc = utils.evaluate_preds(C, [lbl_in_trn, lbl_in_val],[idx_train_tf, idx_val_tf])
 
-    log_resh = tf.reshape(C, [-1, nb_classes])
-    lab_resh = tf.reshape(lbl_in, [-1, nb_classes])
-    msk_resh = tf.reshape(msk_in, [-1])
+    test_loss, test_acc = utils.evaluate_preds(C, [lbl_in_test], [idx_test_tf])
 
-    loss = utils.masked_softmax_cross_entropy(log_resh, lab_resh, msk_resh)
-
-    accuracy = utils.masked_accuracy(log_resh, lab_resh, msk_resh)
-
-    train_op = model2.training(loss, lr, l2_coef)
+    train_op = model2.training(train_val_loss[0], lr, l2_coef)
 
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
@@ -207,73 +219,86 @@ with tf.Graph().as_default():
     with tf.Session() as sess:
         sess.run(init_op)
 
-
+        print("session running")
         train_loss_avg = 0
         train_acc_avg = 0
         val_loss_avg = 0
         val_acc_avg = 0
 
         for epoch in range(nb_epochs):
+            t = time.time()
             tr_step = 0
             tr_size = 1
 
-            while tr_step * batch_size < tr_size:
-                _,loss_value_tr, acc_tr = sess.run([train_op,loss,accuracy],
+            # print(C)
+            # trainng and validation step
+
+            _,_train_val_loss, _train_val_acc = sess.run([train_op,train_val_loss, train_val_acc],
                                                     feed_dict=feed_dict)
                 
-                print(loss_value_tr)
-                train_loss_avg += loss_value_tr
-                train_acc_avg += acc_tr
-                tr_step += 1
+            print("Epoch: {:04d}".format(epoch),
+              "train_loss= {:.4f}".format(_train_val_loss[0]),
+              "train_acc= {:.4f}".format(_train_val_acc[0]),
+              "val_loss= {:.4f}".format(_train_val_loss[1]),
+              "val_acc= {:.4f}".format(_train_val_acc[1]),
+              "time= {:.4f}".format(time.time() - t))
 
-            vl_step = 0
-            vl_size = 1
-            
-            while vl_step * batch_size < vl_size:
-                loss_value_vl, acc_vl = sess.run([loss, accuracy],
-                                                 feed_dict=feed_dict_val)
-                val_loss_avg += loss_value_vl
-                val_acc_avg += acc_vl
-                vl_step += 1
 
-            print('Epoch: %d, Training: loss = %.5f, acc = %.5f | Val: loss = %.5f, acc = %.5f' %
-                  (epoch,train_loss_avg / tr_step, train_acc_avg / tr_step,
-                   val_loss_avg / vl_step, val_acc_avg / vl_step))
-
-            if val_acc_avg / vl_step >= vacc_mx or val_loss_avg / vl_step <= vlss_mn:
-                if val_acc_avg / vl_step >= vacc_mx and val_loss_avg / vl_step <= vlss_mn:
-                    vacc_early_model = val_acc_avg / vl_step
-                    vlss_early_model = val_loss_avg / vl_step
-                    saver.save(sess, checkpt_file)
-                vacc_mx = np.max((val_acc_avg / vl_step, vacc_mx))
-                vlss_mn = np.min((val_loss_avg / vl_step, vlss_mn))
-                curr_step = 0
-            else:
-                curr_step += 1
-                if curr_step == patience:
-                    print('Early stop! Min loss: ', vlss_mn, ', Max accuracy: ', vacc_mx)
-                    print('Early stop model validation loss: ', vlss_early_model, ', accuracy: ', vacc_early_model)
-                    break
-        
-            train_loss_avg = 0
-            train_acc_avg = 0
-            val_loss_avg = 0
-            val_acc_avg = 0
-        
         saver.restore(sess, checkpt_file)
-        
-        ts_size = 1
-        ts_step = 0
-        ts_loss = 0.0
-        ts_acc = 0.0
-        
-        while ts_step * batch_size < ts_size:
-            loss_value_ts, acc_ts = sess.run([loss, accuracy],
-                                             feed_dict=feed_dict_test)
-            ts_loss += loss_value_ts
-            ts_acc += acc_ts
-            ts_step += 1
-        
-        print('Test loss:', ts_loss / ts_step, '; Test accuracy:', ts_acc / ts_step)
+
+        _test_loss, _test_acc = sess.run([test_loss, test_acc],feed_dict=feed_dict_test)
+        print("Hanalughya")
+        print("Test set results:",
+        "loss= {:.4f}".format(_test_loss[0]),
+        "accuracy= {:.4f}".format(_test_acc[0]))
+
 
         sess.close()
+
+
+            # while vestbatch_size < vl_size:
+            #     loss_value_vl, acc_vl = sess.run([loss, accuracy],
+            #                                      feed_dict=feed_dict_val)
+            #     val_loss_avg += loss_value_vl
+            #     val_acc_avg += acc_vl
+            #     vl_step += 1
+
+            # print('Epoch: %d, Training: loss = %.5f, acc = %.5f | Val: loss = %.5f, acc = %.5f' %
+            #       (epoch,train_loss_avg / tr_step, train_acc_avg / tr_step,
+            #        val_loss_avg / vl_step, val_acc_avg / vl_step))
+
+            # if val_acc_avg / vl_step >= vacc_mx or val_loss_avg / vl_step <= vlss_mn:
+            #     if val_acc_avg / vl_step >= vacc_mx and val_loss_avg / vl_step <= vlss_mn:
+            #         vacc_early_model = val_acc_avg / vl_step
+            #         vlss_early_model = val_loss_avg / vl_step
+            #         saver.save(sess, checkpt_file)
+            #     vacc_mx = np.max((val_acc_avg / vl_step, vacc_mx))
+            #     vlss_mn = np.min((val_loss_avg / vl_step, vlss_mn))
+            #     curr_step = 0
+            # else:
+            #     curr_step += 1
+            #     if curr_step == patience:
+            #         print('Early stop! Min loss: ', vlss_mn, ', Max accuracy: ', vacc_mx)
+            #         print('Early stop model validation loss: ', vlss_early_model, ', accuracy: ', vacc_early_model)
+            #         break
+        
+            # train_loss_avg = 0
+            # train_acc_avg = 0
+            # val_loss_avg = 0
+            # val_acc_avg = 0
+        
+        
+        # ts_size = 1
+        # ts_step = 0
+        # ts_loss = 0.0
+        # ts_acc = 0.0
+        
+        # while ts_step * batch_size < ts_size:
+        #     loss_value_ts, acc_ts = sess.run([loss, accuracy],
+        #                                      feed_dict=feed_dict_test)
+        #     ts_loss += loss_value_ts
+        #     ts_acc += acc_ts
+        #     ts_step += 1
+        
+        # print('Test loss:', ts_loss / ts_step, '; Test accuracy:', ts_acc / ts_step)
+

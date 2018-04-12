@@ -195,17 +195,53 @@ def accuracy(preds, labels):
     return np.mean(np.equal(np.argmax(labels, 1), np.argmax(preds, 1)))
 
 
+# def evaluate_preds(preds, labels, indices):
+
+#     split_loss = list()
+#     split_acc = list()
+#     print(preds.shape)
+#     print(type(labels))
+#     for y_split, idx_split in zip(labels, indices):
+#         split_loss.append(categorical_crossentropy(preds[idx_split], y_split[idx_split]))
+#         split_acc.append(accuracy(preds[idx_split], y_split[idx_split]))
+
+#     return split_loss, split_acc
+
+def categorical_crossentropy_tf(preds, labels):
+    return tf.reduce_mean(-tf.log(tf.where(tf.equal(labels,tf.ones_like(labels)), preds, tf.zeros_like(preds))))
+
+def accuracy_tf(preds, labels):
+    temp = tf.equal(tf.argmax(labels, 1), tf.argmax(preds, 1))
+    temp = tf.cast(temp,dtype=tf.int32)
+    # temp1 = tf.where(temp,tf.ones_like(temp),tf.zeros_like(temp))
+    # print("############")
+    # print (temp)
+    # print("############")
+    return tf.reduce_mean(temp)
+
 def evaluate_preds(preds, labels, indices):
 
     split_loss = list()
     split_acc = list()
 
+    # print(labels)
+    # print(indices)
+    # print (preds.eval())
     for y_split, idx_split in zip(labels, indices):
-        split_loss.append(categorical_crossentropy(preds[idx_split], y_split[idx_split]))
-        split_acc.append(accuracy(preds[idx_split], y_split[idx_split]))
+        # print(idx_split)
+        # print(preds[idx_split])
+        print("a")
+        # print(y_split[idx_split])
+        print("b")
+
+        tf.Print(preds,[preds])
+        # change the inputs to variable if possible
+        split_loss.append(categorical_crossentropy_tf(tf.nn.embedding_lookup(preds,idx_split), \
+            tf.nn.embedding_lookup(y_split,idx_split)))
+        split_acc.append(accuracy_tf(tf.nn.embedding_lookup(preds,idx_split), \
+            tf.nn.embedding_lookup(y_split,idx_split)))
 
     return split_loss, split_acc
-
 
 def evaluate_preds_sigmoid(preds, labels, indices):
 
