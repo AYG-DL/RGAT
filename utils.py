@@ -207,16 +207,40 @@ def accuracy(preds, labels):
 
 #     return split_loss, split_acc
 
+def adj_to_bias(adj, sizes, nhood=1):
+    adj = adj.todense()
+    adj = adj[np.newaxis]
+    nb_graphs = adj.shape[0]
+    mt = np.empty(adj.shape)
+    for g in range(nb_graphs):
+        mt[g] = np.eye(adj.shape[1])
+        for _ in range(nhood):
+            mt[g] = np.matmul(mt[g], (adj[g] + np.eye(adj.shape[1])))
+        for i in range(sizes[g]):
+            for j in range(sizes[g]):
+                if mt[g][i][j] > 0.0:
+                    mt[g][i][j] = 1.0
+    temp =  -1e9 * (1.0 - mt)
+    return np.squeeze(temp,axis=0)
+
+
 def categorical_crossentropy_tf(preds, labels):
-    return tf.reduce_mean(-tf.log(tf.where(tf.equal(labels,tf.ones_like(labels)), preds, tf.zeros_like(preds))))
+    temp2 = tf.equal(labels,tf.ones_like(labels))
+    temp2 = tf.Print(temp2,[temp2],message="equality")
+
+    temp3 = tf.where(temp2, preds, tf.ones_like(preds))
+
+    temp3 = tf.Print(temp3,[temp3],message="where")
+
+    temp4 = -tf.log(temp3)
+
+    temp4 = tf.Print(temp4,[temp4],message="logarithm")
+
+    return tf.reduce_mean(temp4)
 
 def accuracy_tf(preds, labels):
     temp = tf.equal(tf.argmax(labels, 1), tf.argmax(preds, 1))
     temp = tf.cast(temp,dtype=tf.int32)
-    # temp1 = tf.where(temp,tf.ones_like(temp),tf.zeros_like(temp))
-    # print("############")
-    # print (temp)
-    # print("############")
     return tf.reduce_mean(temp)
 
 def evaluate_preds(preds, labels, indices):
@@ -227,6 +251,8 @@ def evaluate_preds(preds, labels, indices):
     # print(labels)
     # print(indices)
     # print (preds.eval())
+
+    preds = tf.Print(preds,[preds],message="Actual Input")
     for y_split, idx_split in zip(labels, indices):
         # print(idx_split)
         # print(preds[idx_split])
@@ -234,10 +260,15 @@ def evaluate_preds(preds, labels, indices):
         # print(y_split[idx_split])
         print("b")
 
-        tf.Print(preds,[preds])
+        # tf.Print(preds,[preds])
         # change the inputs to variable if possible
-        split_loss.append(categorical_crossentropy_tf(tf.nn.embedding_lookup(preds,idx_split), \
-            tf.nn.embedding_lookup(y_split,idx_split)))
+        temp = tf.nn.embedding_lookup(preds,idx_split)
+        temp = tf.Print(temp,[temp],message="C lookup")
+
+        temp1 = tf.nn.embedding_lookup(y_split,idx_split)
+        temp1 = tf.Print(temp1,[temp1], message="GT lookup")
+        split_loss.append(categorical_crossentropy_tf(temp, \
+            temp1))
         split_acc.append(accuracy_tf(tf.nn.embedding_lookup(preds,idx_split), \
             tf.nn.embedding_lookup(y_split,idx_split)))
 
@@ -262,11 +293,7 @@ def convert_sparse_matrix_to_sparse_tensor(X):
     # X = X.astype(np.float32)
     coo = X.tocoo()
     indices = np.mat([coo.row, coo.col]).transpose()
-
-    if(X.sum()>0):
-        a = tf.SparseTensorValue(indices, coo.data, coo.shape)
-    else:
-        a = tf.SparseTensorValue(indices = [[0,0]], values=[-10.0] , dense_shape=X.shape)
+    a = tf.SparseTensorValue(indices, coo.data, coo.shape)
     return a
 
 
@@ -299,3 +326,11 @@ def masked_accuracy(logits, labels, mask):
     mask /= tf.reduce_mean(mask)
     accuracy_all *= mask
     return tf.reduce_mean(accuracy_all)
+
+def sparse_dropout(x, keep_prob, noise_shape):
+    """Dropout for sparse tensors."""
+    random_tensor = keep_prob
+    random_tensor += tf.random_uniform(noise_shape)
+    dropout_mask = tf.cast(tf.floor(random_tensor), dtype=tf.bool)
+    pre_out = tf.sparse_retain(x, dropout_mask)
+    return pre_out * (1./keep_prob)
