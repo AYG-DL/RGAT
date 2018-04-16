@@ -116,7 +116,6 @@ def bfs_sample(adj, roots, max_lvl_size):
     """
     BFS with node dropout. Only keeps random subset of nodes per level up to max_lvl_size.
     'roots' should be a mini-batch of nodes (set of node indices).
-
     NOTE: In this implementation, not every node in the mini-batch is guaranteed to have
     the same number of neighbors, as we're sampling for the whole batch at the same time.
     """
@@ -334,3 +333,8 @@ def sparse_dropout(x, keep_prob, noise_shape):
     dropout_mask = tf.cast(tf.floor(random_tensor), dtype=tf.bool)
     pre_out = tf.sparse_retain(x, dropout_mask)
     return pre_out * (1./keep_prob)
+
+
+def weights_creation(layer_no,i,nb_features,hid_units,n_heads):
+	return [tf.get_variable("Weights" + str(layer_no) + str(n) + "_" + str(i), [nb_features, hid_units], dtype=tf.float32, \
+					 initializer=tf.contrib.layers.xavier_initializer()) for n in range(n_heads)]
