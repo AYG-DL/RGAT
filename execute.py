@@ -64,9 +64,9 @@ train_mask = utils.sample_mask(idx_train, y.shape[0])
 
 print(train_mask.shape)
 
-# val_mask = utils.sample_mask(idx_val,y.shape[0])
+val_mask = utils.sample_mask(idx_val,y.shape[0])
 
-# test_mask = utils.sample_mask(idx_test,y.shape[0])
+test_mask = utils.sample_mask(idx_test,y.shape[0])
 
 
 # print (train_mask) 
@@ -77,7 +77,7 @@ print(idx_train)
 print(idx_val)
 print(idx_test)
 
-A = A[42:47] # remove the last self relation matrix
+# A = A[:-1] # remove the last self relation matrix
 num_nodes = A[0].shape[0]
 relations = len(A)
 
@@ -88,8 +88,8 @@ X = sp.eye(A[0].shape[0],A[0].shape[1])
 batch_size = 1
 nb_nodes = X.shape[0]
 nb_classes = 4
-lr = 0.0005  # learning rate
-l2_coef = 0.0  # weight decay
+lr = 0.04  # learning rate
+l2_coef = 0.00002  # weight decay
 
 # watch and learn baby
 temp = sp.csr_matrix(-1 * np.ones((A[0].shape[0], A[0].shape[1])))
@@ -146,7 +146,7 @@ model2 = GAT()
 #     print (i)
 # add self attention loops to every tensor matrix
 checkpt_file = './a.ckpt'
-nb_epochs = 30
+nb_epochs = 180
 # Sparse tensor dropout here
 
 with tf.Graph().as_default():
@@ -159,13 +159,13 @@ with tf.Graph().as_default():
 	msk_in = tf.placeholder(dtype=tf.float32)
 	lbl_in = tf.placeholder(dtype=tf.int32, shape=(nb_nodes, nb_classes))
 
-
+	X = utils.convert_sparse_matrix_to_sparse_tensor(X)
 	feed_dict = {}
 
 	for i, d in zip(A_in, A):
 		feed_dict[i] = d
 
-	feed_dict[X_in] = utils.convert_sparse_matrix_to_sparse_tensor(X)
+	feed_dict[X_in] = X
 	feed_dict[lbl_in] = y_train
 	feed_dict[msk_in] = train_mask
 	# for i,d in zip(idx_train_tf,idx_train):
@@ -177,52 +177,64 @@ with tf.Graph().as_default():
 	feed_dict[attn_drop] = 0.6
 	feed_dict[ffd_drop] = 0.6
 
-	# feed_dict_val = {}
+	feed_dict_val = {}
 
-	# for i,d in zip(A_in,A):
-	#     feed_dict_val[i]=d
-	# feed_dict_val[X_in] = utils.convert_sparse_matrix_to_sparse_tensor(X)
-	# feed_dict_val[lbl_in] = y_val
-	# feed_dict_val[msk_in] = val_mask
-	# feed_dict_val[attn_drop] = 0.0
-	# feed_dict_val[ffd_drop] = 0.0
+	for i,d in zip(A_in,A):
+		feed_dict_val[i]=d
+	feed_dict_val[X_in] = X
+	feed_dict_val[lbl_in] = y_val
+	feed_dict_val[msk_in] = val_mask
+	feed_dict_val[attn_drop] = 0.0
+	feed_dict_val[ffd_drop] = 0.0
 
 
-	# feed_dict_test = {}
+	feed_dict_test = {}
 
-	# for i,d in zip(A_in,A):
-	#     feed_dict_test[i]=d
+	for i,d in zip(A_in,A):
+		feed_dict_test[i]=d
 
-	# feed_dict_test[X_in] = utils.convert_sparse_matrix_to_sparse_tensor(X)
-	# feed_dict_test[lbl_in_test] = y_test
-	# for i,d in zip(idx_test_tf,idx_test):
-	#     feed_dict_test[i]=d
-	# feed_dict_test[attn_drop] = 0.0
-	# feed_dict_test[ffd_drop] = 0.0
+	feed_dict_test[X_in] = X
+	feed_dict_test[lbl_in] = y_test
+	feed_dict_test[msk_in] = test_mask
+	feed_dict_test[attn_drop] = 0.0
+	feed_dict_test[ffd_drop] = 0.0
 
 
 	# add dropout on the input here(please dont remove this fucking comment)
 	# with tf.device("/gpu:0"):
-	# X_in = utils.sparse_dropout(X_in,0.5,(X.shape[0],))
+
+	X = utils.sparse_dropout(X,0.5,(X.dense_shape[0],))
+
 	H = model1.setup(layer_no=1, input_feat_mat=[X_in], hid_units=8,
 					 nb_features=8285, nb_nodes=8285, training=True, attn_drop=attn_drop, ffd_drop=ffd_drop,
-					 adj_mat=A_in, n_heads=1, concat=True)
+					 adj_mat=A_in, n_heads=12, concat=True)
 
 	for i, h in enumerate(H):
-		print(i)
 		H[i] = tf.nn.dropout(h, 0.4)
 
-	# hidden units changes to number of classes in second layer
-	# with tf.device("/gpu:1"):
+	# H1 = model1.setup(layer_no=2, input_feat_mat=H, hid_units=8,
+	# 				 nb_features=128, nb_nodes=8285, training=True, attn_drop=attn_drop, ffd_drop=ffd_drop,
+	# 				 adj_mat=A_in, n_heads=8, concat=True)
+
+	# for i, h in enumerate(H1):
+	# 	print(i)
+	# 	H1[i] = tf.nn.dropout(h, 0.6)
+
+	# # hidden units changes to number of classes in second layer
+	# # with tf.device("/gpu:1"):
+
 	C = model2.setup(layer_no=2, input_feat_mat=H, hid_units=nb_classes,
-					 nb_features=8, nb_nodes=8285, training=True, attn_drop=attn_drop, ffd_drop=ffd_drop,
+					 nb_features=96, nb_nodes=8285, training=True, attn_drop=attn_drop, ffd_drop=ffd_drop,
 					 adj_mat=A_in, n_heads=1, concat=False)
 
-	C = tf.nn.elu(C[0])
+	# C = H
+	C  = (tf.add_n(C)/len(C))
+	# C = C[0]
 	# C = tf.ones((nb_nodes,nb_classes))
 	log_resh = tf.reshape(C, [-1, nb_classes])
 	lab_resh = tf.reshape(lbl_in, [-1, nb_classes])
 	msk_resh = tf.reshape(msk_in, [-1])
+	
 	# # print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
 	# print (C.get_shape().as_list())
 	# idx_train_tf
@@ -247,7 +259,10 @@ with tf.Graph().as_default():
 
 	summaries = tf.summary.merge_all()
 
-	vars = tf.trainable_variables()
+	# vars = tf.trainable_variables()
+
+
+
 
 	with tf.Session(config=config) as sess:
 		sess.run(init_op)
@@ -273,13 +288,23 @@ with tf.Graph().as_default():
 
 			writer.add_summary(summ, global_step=epoch)
 
+			val_loss,val_acc = sess.run([loss,accuracy],feed_dict=feed_dict_val)
+
 			print("Epoch: {:04d}".format(epoch),
 				  "train_loss= {:.4f}".format(_train_val_loss),
 				  "train_acc= {:.4f}".format(_train_val_acc),
+				  "val_loss= {:.4f}".format(val_loss),
+				  "val_acc= {:.4f}".format(val_acc),
 				  "time= {:.4f}".format(time.time() - t))
 
 		# train_writer = tf.summary.FileWriter("./tb/")
 		#train_writer.add_graph(sess.graph)
+
+		test_loss,test_acc = sess.run([loss,accuracy],
+										feed_dict=feed_dict_test)
+
+		print("test_loss: {:04f}".format(test_loss),
+				  "test_acc= {:.4f}".format(test_acc))
 		writer.add_graph(sess.graph)
 		# train_writer.close()
 		# saver.restore(sess, checkpt_file)

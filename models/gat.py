@@ -20,6 +20,7 @@ class GAT():
 		# tf.summary.histogram(str(layer_no), self.W_heads)
 
 		self.W = [utils.weights_creation(layer_no=layer_no,i=i,nb_features=nb_features,hid_units=hid_units,n_heads=n_heads) for i in range(len(adj_mat))]
+		
 		tf.summary.histogram(str(layer_no) + "relation", self.W)
 
 		# self.a = [self.a_heads for _ in range(len(adj_mat))]
@@ -34,7 +35,7 @@ class GAT():
 				W_r = self.W[i][j]  # FxF'
 				# a_r = self.a[i][j] #2F'x1
 
-				if len(input_feat_mat) == 1:
+				if len(input_feat_mat) == 1 and layer_no==1:
 					h_pr = tf.sparse_tensor_dense_matmul(input_feat_mat[0], W_r)  # N*F' matrix
 				else:
 					h_pr = tf.matmul(input_feat_mat[i], W_r)
@@ -44,8 +45,8 @@ class GAT():
 					f_1 = tf.layers.conv1d(h_pr, 1, 1)
 					f_2 = tf.layers.conv1d(h_pr, 1, 1)
 
-					print((f_1).get_shape().as_list())
-					print((f_2).get_shape().as_list())
+					# print((f_1).get_shape().as_list())
+					# print((f_2).get_shape().as_list())
 
 					f_1 = tf.squeeze(f_1, axis=0)
 					f_2 = tf.squeeze(f_2, axis=0)
@@ -75,10 +76,10 @@ class GAT():
 
 					if attn_drop != 0.0:
 						coefs = tf.SparseTensor(indices=coefs.indices,
-												values=tf.nn.dropout(coefs.values, 1.0 - attn_drop),
+												values=tf.nn.dropout(coefs.values,1-attn_drop),
 												dense_shape=coefs.dense_shape)
 					if ffd_drop != 0.0:
-						h_pr = tf.nn.dropout(h_pr, 1.0 - ffd_drop)
+						h_pr = tf.nn.dropout(h_pr,1-ffd_drop)
 
 					rest1 = time.time()
 
@@ -88,18 +89,18 @@ class GAT():
 					h_prime_weighted = tf.contrib.layers.bias_add(h_prime_weighted)
 					rest2 = time.time()
 
-					if concat:
-						F_ = activation(h_prime_weighted)
-					else:  # averaged
-						F_ = h_prime_weighted
-
+					# if concat:
+					# 	F_ = activation(h_prime_weighted)
+					# else:  # averaged
+					# 	F_ = h_prime_weighted
+					F_ = activation(h_prime_weighted)
 					H.append(F_)
 
 			if concat:
 				self.H_all_rel.append(tf.concat(H, axis=1))
 
 			else:
-				self.H_all_rel.append(tf.add_n(H) / (len(H) * n_heads))
+				self.H_all_rel.append(tf.add_n(H) / n_heads)
 
 			stop = time.time()
 
